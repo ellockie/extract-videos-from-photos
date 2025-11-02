@@ -6,7 +6,9 @@ from typing import Optional
 # --- SETTINGS -------------------------------------------------
 INPUT_DIR = pathlib.Path(".")
 OUTPUT_DIR = pathlib.Path("./extracted_videos")  # This will be updated dynamically
-REQUIRE_XMP_MOTION = True  # set to False if your files don't have that XMP flag
+REQUIRE_XMP_MOTION = (
+    False  # Changed to False - set to True if your files have motion XMP tags
+)
 MAX_TAIL_SEARCH = 512_000  # search for MP4 only in last 500 KB
 # --------------------------------------------------------------
 
@@ -47,6 +49,8 @@ def extract_xmp_packets(data: bytes) -> list[bytes]:
         if i + 2 > n:
             break
         seg_len = int.from_bytes(data[i : i + 2], "big")
+        if seg_len < 2:  # Invalid segment length
+            break
         seg_start = i + 2
         seg_end = seg_start + seg_len - 2
         if seg_end > n:
@@ -93,21 +97,23 @@ def find_appended_mp4(data: bytes, jpeg_end: int) -> Optional[int]:
     We look for 'ftyp' near the end of the file, and ensure start >= jpeg_end.
     Also enforce MP4 box layout: [4 bytes size][4 bytes 'ftyp']...
     """
-    tail_start = max(jpeg_end, len(data) - MAX_TAIL_SEARCH)
-    tail = data[tail_start:]
+    # Search in the tail portion after JPEG
+    tail_data = data[jpeg_end:]
 
-    idx = tail.find(b"ftyp")
+    # Look for ftyp signature
+    idx = tail_data.find(b"ftyp")
     if idx == -1:
         return None
 
     # MP4: 4 bytes length, then 'ftyp'
-    mp4_start = tail_start + idx - 4
-    if mp4_start < jpeg_end:
-        # then it's not truly appended
+    mp4_start_in_tail = idx - 4
+    if mp4_start_in_tail < 0:
         return None
 
+    mp4_start = jpeg_end + mp4_start_in_tail
+
     # sanity check: first 4 bytes = size
-    if mp4_start < 0 or mp4_start + 8 > len(data):
+    if mp4_start + 8 > len(data):
         return None
 
     size_bytes = data[mp4_start : mp4_start + 4]
@@ -116,32 +122,58 @@ def find_appended_mp4(data: bytes, jpeg_end: int) -> Optional[int]:
     # size must be at least header size
     if mp4_size < 16:
         return None
-    # size cannot exceed file (some Samsung files put *actual* file size here, that's OK)
-    if mp4_start + mp4_size > len(data) + 8:  # allow a bit of slop
-        # looks bogus
-        pass  # don't fail hard, some cameras do weird stuff
 
     return mp4_start
 
 
 def extract_from_file(jpg_path: pathlib.Path, out_dir: pathlib.Path) -> bool:
+    print(f"Processing: {jpg_path.name}")
     data = jpg_path.read_bytes()
+    print(f"  File size: {len(data)} bytes")
 
     # 1) Must be JPEG with EOI
     jpeg_end = find_jpeg_eoi(data)
     if jpeg_end is None:
+        print(f"  ❌ Not a valid JPEG (no EOI marker found)")
         return False
+    print(f"  ✓ JPEG EOI found at position {jpeg_end}")
 
     # 2) Optional: must have motion XMP
     if REQUIRE_XMP_MOTION:
         xmps = extract_xmp_packets(data)
+        print(f"  Found {len(xmps)} XMP packets")
         if not xmp_indicates_motion(xmps):
+            print(f"  ❌ No motion photo XMP tags found")
+            # Debug: show what XMP content we found
+            for i, xmp in enumerate(xmps):
+                xmp_preview = xmp[:200].decode("utf-8", errors="ignore")
+                print(f"    XMP {i+1}: {xmp_preview}...")
             return False
+        print(f"  ✓ Motion photo XMP tags found")
+    else:
+        print(f"  ⚠️  XMP motion check disabled")
 
     # 3) Must have appended MP4 AFTER JPEG
     mp4_offset = find_appended_mp4(data, jpeg_end)
     if mp4_offset is None:
+        print(f"  ❌ No MP4 data found after JPEG")
+        # Debug: check if there's any data after JPEG
+        remaining_data = len(data) - jpeg_end
+        print(f"    Remaining data after JPEG: {remaining_data} bytes")
+        if remaining_data > 16:  # Only show sample if there's substantial data
+            tail_sample = data[jpeg_end : jpeg_end + 50]
+            print(f"    First 50 bytes of tail: {tail_sample}")
+            # Look for any video signatures
+            video_sigs = [b"ftyp", b"moov", b"mdat", b"mvhd"]
+            for sig in video_sigs:
+                if sig in data[jpeg_end:]:
+                    pos = data[jpeg_end:].find(sig)
+                    print(f"    Found '{sig.decode()}' signature at offset +{pos}")
         return False
+
+    print(f"  ✓ MP4 found at offset {mp4_offset}")
+    mp4_size = len(data) - mp4_offset
+    print(f"  MP4 size: {mp4_size} bytes")
 
     # Create output directory if it doesn't exist
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -173,6 +205,9 @@ def main():
     # Set output directory inside input directory with underscore prefix
     OUTPUT_DIR = INPUT_DIR / "_extracted_videos"
 
+    print(f"\nScanning for JPEG files in: {INPUT_DIR.resolve()}")
+    print(f"XMP motion requirement: {'ON' if REQUIRE_XMP_MOTION else 'OFF'}")
+
     count_total = 0
     count_extracted = 0
 
@@ -184,6 +219,7 @@ def main():
                 count_extracted += 1
             else:
                 print(f"[-] Skipped (no proper motion video): {jpg.name}")
+            print()  # blank line for readability
 
     print(f"\nDone. Extracted {count_extracted} / {count_total} files.")
     print(f"Output folder: {OUTPUT_DIR.resolve()}")
