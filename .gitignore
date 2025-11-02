@@ -1,0 +1,11 @@
+# Local configuration file (contains user-specific paths)
+config.local.json
+
+# Extracted videos and frames
+_extracted_videos/
+_frames/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo

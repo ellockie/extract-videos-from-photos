@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import pathlib
 import sys
+import subprocess
+import json
 from typing import Optional
 
 # --- SETTINGS -------------------------------------------------
@@ -10,6 +12,9 @@ REQUIRE_XMP_MOTION = (
     False  # Changed to False - set to True if your files have motion XMP tags
 )
 MAX_TAIL_SEARCH = 512_000  # search for MP4 only in last 500 KB
+CONFIG_FILE = (
+    pathlib.Path(__file__).parent / "config.local.json"
+)  # Not committed to git
 # --------------------------------------------------------------
 
 
@@ -185,6 +190,128 @@ def extract_from_file(jpg_path: pathlib.Path, out_dir: pathlib.Path) -> bool:
     return True
 
 
+def load_ffmpeg_path() -> Optional[str]:
+    """Load ffmpeg path from config file."""
+    if CONFIG_FILE.exists():
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                config = json.load(f)
+                return config.get("ffmpeg_path")
+        except Exception as e:
+            print(f"Warning: Could not read config file: {e}")
+    return None
+
+
+def save_ffmpeg_path(path: str) -> None:
+    """Save ffmpeg path to config file."""
+    try:
+        config = {}
+        if CONFIG_FILE.exists():
+            with open(CONFIG_FILE, "r") as f:
+                config = json.load(f)
+        config["ffmpeg_path"] = path
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(config, f, indent=2)
+        print(f"✓ Saved ffmpeg path to {CONFIG_FILE}")
+    except Exception as e:
+        print(f"Warning: Could not save config file: {e}")
+
+
+def extract_frames_from_video(video_path: pathlib.Path, ffmpeg_path: str) -> bool:
+    """Extract frames from a video file using ffmpeg."""
+    frames_dir = video_path.parent / "_frames" / video_path.stem
+    frames_dir.mkdir(parents=True, exist_ok=True)
+
+    output_pattern = frames_dir / f"{video_path.stem}_%04d.jpg"
+
+    cmd = [
+        ffmpeg_path,
+        "-i",
+        str(video_path),
+        "-vf",
+        "fps=1",  # 1 frame per second
+        "-q:v",
+        "2",  # High quality JPEG
+        str(output_pattern),
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"  ❌ Failed to extract frames: {e}")
+        return False
+    except FileNotFoundError:
+        print(f"  ❌ ffmpeg not found at: {ffmpeg_path}")
+        return False
+
+
+def ask_user_for_frame_extraction(extracted_videos: list[pathlib.Path]) -> None:
+    """Ask user if they want to extract frames from videos."""
+    if not extracted_videos:
+        return
+
+    print("\n" + "=" * 50)
+    print(f"Successfully extracted {len(extracted_videos)} video(s).")
+    print("=" * 50)
+
+    response = (
+        input("\nDo you want to extract frames from these videos? (y/n): ")
+        .strip()
+        .lower()
+    )
+    if response != "y":
+        print("Skipping frame extraction.")
+        return
+
+    # Load or ask for ffmpeg path
+    ffmpeg_path = load_ffmpeg_path()
+
+    if not ffmpeg_path:
+        print("\n⚠️  No ffmpeg path configured.")
+        print("You can configure ffmpeg path in the config file for future use.")
+        print(f"Config file location: {CONFIG_FILE}")
+        print("\nPlease provide the path to ffmpeg executable:")
+        print("Examples:")
+        print("  Windows: C:\\ffmpeg\\bin\\ffmpeg.exe")
+        print("  Linux/Mac: /usr/bin/ffmpeg or /usr/local/bin/ffmpeg")
+
+        ffmpeg_path = input("\nEnter ffmpeg path (or press Enter to skip): ").strip()
+
+        if not ffmpeg_path:
+            print("Skipping frame extraction.")
+            return
+
+        # Validate the path
+        if not pathlib.Path(ffmpeg_path).exists():
+            print(f"❌ Path does not exist: {ffmpeg_path}")
+            print("Skipping frame extraction.")
+            return
+
+        # Ask if user wants to save this path
+        save_response = input("Save this path for future use? (y/n): ").strip().lower()
+        if save_response == "y":
+            save_ffmpeg_path(ffmpeg_path)
+
+    # Extract frames from all videos
+    print(f"\nExtracting frames using: {ffmpeg_path}")
+    print("-" * 50)
+
+    success_count = 0
+    for video in extracted_videos:
+        print(f"Extracting frames from: {video.name}")
+        if extract_frames_from_video(video, ffmpeg_path):
+            print(f"  ✓ Frames extracted successfully")
+            success_count += 1
+        else:
+            print(f"  ❌ Failed to extract frames")
+
+    print("-" * 50)
+    print(
+        f"Frame extraction complete: {success_count}/{len(extracted_videos)} successful"
+    )
+
+
 def main():
     global INPUT_DIR, OUTPUT_DIR
     print("-" * 50)
@@ -210,6 +337,7 @@ def main():
 
     count_total = 0
     count_extracted = 0
+    extracted_videos = []
 
     for ext in ("*.jpg", "*.jpeg", "*.JPG", "*.JPEG"):
         for jpg in INPUT_DIR.glob(ext):
@@ -217,13 +345,18 @@ def main():
             if extract_from_file(jpg, OUTPUT_DIR):
                 print(f"[+] Extracted video from {jpg.name}")
                 count_extracted += 1
+                extracted_videos.append(OUTPUT_DIR / f"{jpg.stem}.mp4")
             else:
                 print(f"[-] Skipped (no proper motion video): {jpg.name}")
             print()  # blank line for readability
 
     print(f"\nDone. Extracted {count_extracted} / {count_total} files.")
-    print(f"Output folder: {OUTPUT_DIR.resolve()}")
+    if count_extracted > 0:
+        print(f"Output folder: {OUTPUT_DIR.resolve()}")
     print("-" * 50)
+
+    # Ask user about frame extraction
+    ask_user_for_frame_extraction(extracted_videos)
 
 
 if __name__ == "__main__":
