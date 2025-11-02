@@ -29,12 +29,13 @@ Many modern smartphones create "motion photos" or "live photos" by appending a s
 ## Installation
 
 1. Clone this repository:
+
 ```bash
 git clone https://github.com/ellockie/extract-videos-from-photos.git
 cd extract-videos-from-photos
 ```
 
-2. (Optional) Install FFmpeg for frame extraction:
+1. (Optional) Install FFmpeg for frame extraction:
    - **Windows**: Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add to PATH
    - **Linux**: `sudo apt-get install ffmpeg`
    - **macOS**: `brew install ffmpeg`
@@ -44,6 +45,7 @@ cd extract-videos-from-photos
 ### Basic Usage
 
 Extract videos from the current directory:
+
 ```bash
 python extract_videos.py
 ```
@@ -51,6 +53,7 @@ python extract_videos.py
 ### Specify Input Directory
 
 Extract videos from a specific directory:
+
 ```bash
 python extract_videos.py /path/to/photos
 ```
@@ -80,6 +83,7 @@ Edit the following variables at the top of `extract_videos.py`:
 The script can save FFmpeg path for future use:
 
 1. Create `config.local.json` (not tracked by git):
+
 ```json
 {
   "ffmpeg_path": "C:\\ffmpeg\\bin\\ffmpeg.exe"
@@ -87,6 +91,7 @@ The script can save FFmpeg path for future use:
 ```
 
 Or use the provided example:
+
 ```bash
 cp config.example.json config.local.json
 ```
@@ -97,7 +102,7 @@ Then edit `config.local.json` with your FFmpeg path.
 
 ### Directory Structure
 
-```
+```text
 your-photos/
 ├── photo1.jpg
 ├── photo2.jpg
@@ -116,7 +121,7 @@ your-photos/
 
 ### Output Example
 
-```
+```text
 Processing: IMG_1234.jpg
   File size: 5432198 bytes
   ✓ JPEG EOI found at position 5400000
@@ -144,11 +149,14 @@ After extracting videos, the script can optionally extract individual frames:
 ## Supported Formats
 
 ### Input
+
 - JPEG/JPG files with appended MP4 data
 - Motion photos from Samsung, Google Pixel, and other smartphones
 
 ### Motion Photo Tags (Optional)
+
 The script can detect the following XMP tags:
+
 - `GCamera:MotionPhoto`
 - `Camera:MotionPhoto`
 - `MotionPhoto`
@@ -173,13 +181,15 @@ The script can detect the following XMP tags:
 ### FFmpeg not found
 
 If frame extraction fails:
+
 1. Ensure FFmpeg is installed
-2. Verify the path in `config.local.json`
-3. Test FFmpeg in terminal: `ffmpeg -version`
+1. Verify the path in `config.local.json`
+1. Test FFmpeg in terminal: `ffmpeg -version`
 
 ### Permission errors
 
 Ensure you have:
+
 - Read permission for input directory
 - Write permission for output directory
 
@@ -187,7 +197,7 @@ Ensure you have:
 
 ### File Structure
 
-```
+```text
 extract-videos-from-photos/
 ├── extract_videos.py           # Main script
 ├── config.example.json         # Example configuration
