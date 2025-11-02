@@ -152,8 +152,20 @@ def extract_from_file(jpg_path: pathlib.Path, out_dir: pathlib.Path) -> bool:
 
 def main():
     global INPUT_DIR
+    print("-" * 50)
     if len(sys.argv) > 1:
         INPUT_DIR = pathlib.Path(sys.argv[1])
+    else:
+        # No input argument provided - inform the user
+        print("No input directory provided!")
+        print(f"Usage: {sys.argv[0]} <input_directory>")
+        print(f"Example: {sys.argv[0]} /path/to/photos")
+        print(f"")
+        print(f"Current default directory: {INPUT_DIR.resolve()}")
+        print(f"You can provide an input directory as a command line argument,")
+        print(f"or the script will use the current directory by default.")
+        print(f"")
+        print(f"Proceeding with default directory: {INPUT_DIR.resolve()}")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -171,6 +183,7 @@ def main():
 
     print(f"\nDone. Extracted {count_extracted} / {count_total} files.")
     print(f"Output folder: {OUTPUT_DIR.resolve()}")
+    print("-" * 50)
 
 
 if __name__ == "__main__":
