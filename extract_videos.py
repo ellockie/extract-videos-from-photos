@@ -5,7 +5,7 @@ from typing import Optional
 
 # --- SETTINGS -------------------------------------------------
 INPUT_DIR = pathlib.Path(".")
-OUTPUT_DIR = pathlib.Path("./extracted_videos")
+OUTPUT_DIR = pathlib.Path("./extracted_videos")  # This will be updated dynamically
 REQUIRE_XMP_MOTION = True  # set to False if your files don't have that XMP flag
 MAX_TAIL_SEARCH = 512_000  # search for MP4 only in last 500 KB
 # --------------------------------------------------------------
@@ -143,6 +143,9 @@ def extract_from_file(jpg_path: pathlib.Path, out_dir: pathlib.Path) -> bool:
     if mp4_offset is None:
         return False
 
+    # Create output directory if it doesn't exist
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     mp4_data = data[mp4_offset:]
     out_name = jpg_path.stem + ".mp4"
     out_file = out_dir / out_name
@@ -151,7 +154,7 @@ def extract_from_file(jpg_path: pathlib.Path, out_dir: pathlib.Path) -> bool:
 
 
 def main():
-    global INPUT_DIR
+    global INPUT_DIR, OUTPUT_DIR
     print("-" * 50)
     if len(sys.argv) > 1:
         INPUT_DIR = pathlib.Path(sys.argv[1])
@@ -167,7 +170,8 @@ def main():
         print(f"")
         print(f"Proceeding with default directory: {INPUT_DIR.resolve()}")
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    # Set output directory inside input directory with underscore prefix
+    OUTPUT_DIR = INPUT_DIR / "_extracted_videos"
 
     count_total = 0
     count_extracted = 0
